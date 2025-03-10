@@ -1,3 +1,3 @@
 # EXTRACAO_DO
 
-Projeto de webscraping do diário oficial do município de Niterói.
+Projeto de webscraping do Diário Oficial do município de Niterói.
