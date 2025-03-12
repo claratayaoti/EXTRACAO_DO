@@ -26,7 +26,6 @@ def baixar_pdf(url):
     response = requests.get(url)
     if response.status_code == 200:
         return io.BytesIO(response.content)
-    
     print(f"Erro ao baixar o PDF: {response.status_code}")
     return None
 
@@ -39,71 +38,136 @@ def extrair_texto_pdf(pdf_bytes):
 def pre_processar_texto(texto):
     """Remove cabeçalhos de página e ruídos do texto extraído."""
     linhas = texto.split("\n")
-    texto_limpo = []
-    for linha in linhas:
-        if not re.search(r"Página \d+", linha):  # Remove cabeçalhos com número de página
-            texto_limpo.append(linha)
+    texto_limpo = [linha for linha in linhas if not re.search(r"Página \d+", linha)]
     return "\n".join(texto_limpo)
 
 def segmentar_texto(texto):
     """Segmenta o texto extraído em Decretos e Portarias."""
     decretos = []
-    portarias = []
-    
-    # Expressões regulares para capturar Decretos e Portarias
+    portarias_nomeacao = []
+    portarias_exoneracao = []
+    portarias_insubsistentes = []
+    portarias_corrigendas = []
+
+    # Expressões regulares
     regex_decreto = re.compile(
-    r"DECRETO Nº (\d+/\d{4})\s*\n"  # Captura o número do decreto
-    r"(.*?)"  # Captura todo o conteúdo do decreto
-    r"PREFEITURA MUNICIPAL DE NITERÓI, EM \d{1,2} DE \w+ DE \d{4}\.",  # Captura a data final do decreto
-    re.DOTALL
-)
-    
-    regex_portaria = re.compile(
-        r"Port\. Nº (\d+/\d+)-\s*(Nomeia|Nomear|Exonera|Exonerar?,\s*a\s*pedido,?)\s*"  # Número e tipo
-        r"([\wÀ-ÿ\s]+?)\s*para exercer o cargo de\s*([\wÀ-ÿ\s]+?),?\s*"  # Nome e cargo
-        r"([A-Z]+-?\d*)?,?\s*(da|do)\s*([\wÀ-ÿ\s]+),"  # Código do cargo (opcional) e órgão
-        r"\s*?em vaga decorrente da exoneração de\s*([\wÀ-ÿ\s]+),?"  # Nome do exonerado
+        r"DECRETO Nº (\d+/\d{4})\s*\n"  # Captura o número do decreto
+        r"(.*?)"  # Captura todo o conteúdo do decreto
+        r"PREFEITURA MUNICIPAL DE NITERÓI, EM \d{1,2} DE \w+ DE \d{4}\.",  # Captura a data final do decreto
+        re.DOTALL
     )
-    
+
+    regex_portaria_nomeacao = re.compile(
+        r"Port\. Nº (\d+/\d+)\s*-"  # Número da portaria
+        r"\s*(Nomeia|Nomear)\s*"  # Tipo
+        r"([\wÀ-ÿ\s]+?)\s*"  # Nome
+        r"para exercer o cargo de\s*([\wÀ-ÿ\s]+),\s*([\w\d\s-]+),\s*"  # Cargo e código
+        r"(da|do)\s*([\wÀ-ÿ\s,]+?)\s*"  # Órgão
+        r"(?:,\s*em\s*vaga\s*decorrente\s*da\s*exoneração\s*de\s*([\wÀ-ÿ\s]+))?"  # Vaga decorrente (opcional)
+        r"(?:\s*,\s*acrescido\s*das\s*gratificações\s*previstas\s*na\s*CI\s*nº\s*(\d+/\d+))?\s*\.",  # Gratificações (opcional)
+        re.DOTALL
+    )
+
+    regex_portaria_exoneracao = re.compile(
+        r"Port\. Nº (\d+/\d+)\s*-\s*(Exonera|Exonerar,?\s*a\s*pedido,?|Exonerar,?)"  # Número e tipo
+        r"\s*([\wÀ-ÿ\s]+?)\s*"  # Nome
+        r"do\s*cargo\s*de\s*([\wÀ-ÿ\s,]+),\s*([\w\d\s-]+),"  # Cargo e código do cargo
+        r"\s*(da|do)\s*([\wÀ-ÿ\s]+)",  # Órgão
+        re.DOTALL
+    )
+
+    regex_insubsistente = re.compile(
+        r"Port\. Nº (\d+/\d+)\s*-\s*"  # Número da portaria atual
+        r"Torna insubsistente a Portaria (nº|Nº) (\d+/\d+),\s*"  # Número da portaria insubsistente
+        r"publicada em (\d{2}/\d{2}/\d{4})\.?",  # Data de publicação
+        re.DOTALL
+    )
+
+    regex_substituicao = re.compile(
+        r"Na Portaria nº (\d+/\d+),\s*"  # Número da portaria
+        r"publicada em (\d{2}/\d{2}/\d{4}),\s*"  # Data de publicação
+        r"\s*onde se lê:\s*([\wÀ-ÿ\s,]+?)\.\s*"  # Nome original
+        r"leia-se:\s*([\wÀ-ÿ\s,]+?)\.",  # Nome corrigido
+        re.DOTALL
+    )
+
+    # Processamento de decretos
     for match in regex_decreto.finditer(texto):
         num_decreto, conteudo = match.groups()
         decretos.append({
-            "Número": num_decreto or "",
+            "Número": num_decreto,
             "Conteúdo": conteudo.strip()
         })
-        
-    if match:
-        num_decreto, conteudo = match.groups()
-    print(f"Número do Decreto: {num_decreto}")
-    print(f"Conteúdo:\n{conteudo[:500]}...")
-    
-    for match in regex_portaria.finditer(texto):
-        num_portaria, tipo, nome, cargo, codigo, _, orgao, vaga_decorrente = match.groups()
-        portarias.append({
-            "Número": num_portaria,
-            "Tipo": "Nomeação" if "Nomeia" in tipo or "Nomear" in tipo else "Exoneração",
-            "Nome": nome.strip(),
-            "Cargo": cargo.strip(),
-            "Código": codigo.strip() if codigo else "",
-            "Órgão": orgao.strip(),
-            "Vaga Decorrente": vaga_decorrente.strip()
-        })
-    
-    return decretos, portarias
 
-def salvar_csv(decretos, portarias):
+    # Processamento de portarias de nomeação
+    for resultado in regex_portaria_nomeacao.finditer(texto):
+        portarias_nomeacao.append({
+            "num_portaria": resultado.group(1),
+            "tipo": resultado.group(2),
+            "nome": resultado.group(3),
+            "cargo": resultado.group(4),
+            "cod_cargo": resultado.group(5),
+            "orgao": resultado.group(7),
+            "vaga_decorrente": resultado.group(8),
+            "gratificacoes": resultado.group(9)
+        })
+
+    # Processamento de portarias de exoneração
+    for resultado in regex_portaria_exoneracao.finditer(texto):
+        portarias_exoneracao.append({
+            "num_portaria": resultado.group(1),
+            "tipo": resultado.group(2),
+            "nome": resultado.group(3),
+            "cargo": resultado.group(4),
+            "cod_cargo": resultado.group(5),
+            "orgao": resultado.group(7)
+        })
+
+    # Processamento de portarias insubsistentes
+    for resultado in regex_insubsistente.finditer(texto):
+        portarias_insubsistentes.append({
+            "num_portaria": resultado.group(1),
+            "portaria_insubsistente": resultado.group(3),
+            "data_publicacao": resultado.group(4)
+        })
+
+    # Processamento de corrigendas
+    for resultado in regex_substituicao.finditer(texto):
+        portarias_corrigendas.append({
+            "num_portaria": resultado.group(1),
+            "data_publicacao": resultado.group(2),
+            "texto_anterior": resultado.group(3),
+            "texto_corrigido": resultado.group(4)
+        })
+
+    return decretos, portarias_nomeacao, portarias_exoneracao, portarias_insubsistentes, portarias_corrigendas
+
+def salvar_csv(decretos, portarias_nomeacao, portarias_exoneracao, portarias_insubsistentes, portarias_corrigendas):
     """Salva os decretos e portarias em arquivos CSV."""
     with open("decretos.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["Número", "Conteúdo"])
         writer.writeheader()
         writer.writerows(decretos)
-        import pandas as pd
 
-        
-    with open("portarias.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["Número", "Tipo", "Nome", "Cargo", "Código", "Órgão", "Vaga Decorrente"])
+    with open("portarias_nomeacao.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["num_portaria", "tipo", "nome", "cargo", "cod_cargo", "orgao", "vaga_decorrente", "gratificacoes"])
         writer.writeheader()
-        writer.writerows(portarias)
+        writer.writerows(portarias_nomeacao)
+
+    with open("portarias_exoneracao.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["num_portaria", "tipo", "nome", "cargo", "cod_cargo", "orgao"])
+        writer.writeheader()
+        writer.writerows(portarias_exoneracao)
+
+    with open("portarias_insubsistentes.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["num_portaria", "portaria_insubsistente", "data_publicacao"])
+        writer.writeheader()
+        writer.writerows(portarias_insubsistentes)
+
+    with open("portarias_corrigendas.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["num_portaria", "data_publicacao", "texto_anterior", "texto_corrigido"])
+        writer.writeheader()
+        writer.writerows(portarias_corrigendas)
 
 # 🟢 Execução do Script
 if __name__ == "__main__":
@@ -112,12 +176,15 @@ if __name__ == "__main__":
     print(f"Baixando: {url}")
     if pdf_bytes := baixar_pdf(url):
         texto = extrair_texto_pdf(pdf_bytes)
-        decretos, portarias = segmentar_texto(texto)
+        decretos, portarias_nomeacao, portarias_exoneracao, portarias_insubsistentes, portarias_corrigendas = segmentar_texto(texto)
 
         print(f"✅ {len(decretos)} decretos encontrados")
-        print(f"✅ {len(portarias)} portarias encontradas")
+        print(f"✅ {len(portarias_nomeacao)} portarias de nomeação encontradas")
+        print(f"✅ {len(portarias_exoneracao)} portarias de exoneração encontradas")
+        print(f"✅ {len(portarias_insubsistentes)} portarias insubsistentes encontradas")
+        print(f"✅ {len(portarias_corrigendas)} corrigendas encontradas")
 
-        salvar_csv(decretos, portarias)
-        print("Arquivos gerados: decretos.csv, portarias.csv")
+        salvar_csv(decretos, portarias_nomeacao, portarias_exoneracao, portarias_insubsistentes, portarias_corrigendas)
+        print("Arquivos gerados: decretos.csv, portarias_nomeacao.csv, portarias_exoneracao.csv, portarias_insubsistentes.csv, portarias_corrigendas.csv")
     else:
         print("❌ Não foi possível baixar o Diário Oficial de hoje.")
