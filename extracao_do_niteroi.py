@@ -49,13 +49,14 @@ def segmentar_texto(texto):
     portarias_insubsistentes = []
     portarias_corrigendas = []
 
-    # Expressões regulares
+    ## Expressões regulares
     regex_decreto = re.compile(
         r"DECRETO Nº (\d+/\d{4})\s*\n"  # Captura o número do decreto
         r"(.*?)"  # Captura todo o conteúdo do decreto
         r"PREFEITURA MUNICIPAL DE NITERÓI, EM \d{1,2} DE \w+ DE \d{4}\.",  # Captura a data final do decreto
         re.DOTALL
     )
+
     # Nomeação
     regex_portaria_nomeacao = re.compile(
         r"Port\. Nº (\d+/\d+)\s*-\s*"  # Número da portaria
@@ -67,14 +68,16 @@ def segmentar_texto(texto):
         r"(?:\s*,\s*acrescido\s*das\s*gratificações\s*previstas\s*na\s*CI\s*nº\s*(\d+/\d+))?\s*\.",  # Gratificações (opcional)
         re.DOTALL
     )
+    
     # Exoneração
     regex_portaria_exoneracao = re.compile(
-        r"\s*Port\. Nº (\d+/\d+)\s*-\s*(Exonera,?|Exonerar,?|Exonerar,?\s*a\s*pedido,?|Exonera,?\s*a\s*pedido,?)"  # Número e tipo
-        r"\s*([\wÀ-ÿ\s]+?)\s*"  # Nome
-        r"\s*do\s*cargo\s*de\s*([\wÀ-ÿ\s,]+),\s*([\w\d\s-]+),"  # Cargo e código do cargo
-        r"\s*(da|do)\s*([\wÀ-ÿ\s]+)",  # Órgão
+        r"Port\. Nº (\d+/\d+)\s*-\s*(Exonera(?:,?\s*a\s*pedido)?|Exonerar,?\s*a\s*pedido?|Exonera,\s*|Exonerar,\s*),?\s*"  # Número da portaria e tipo de exoneração
+        r"([\wÀ-ÿ\s]+?),?\s*"  # Nome do exonerado
+        r"do\s*cargo\s*de\s*([\wÀ-ÿ\s]+),\s*([\w\d\s-]+),\s*"  # Cargo e código
+        r"(?:da|do)\s*([\wÀ-ÿ\s,]+)",  # Órgão
         re.DOTALL
     )
+    
     # Torna insubsistente
     regex_insubsistente = re.compile(
         r"Port\. Nº (\d+/\d+)\s*-\s*"  # Número da portaria atual
@@ -82,15 +85,16 @@ def segmentar_texto(texto):
         r"publicada em (\d{2}/\d{2}/\d{4})\.?",  # Data de publicação
         re.DOTALL
     )
+
     # Corrigenda
     regex_substituicao = re.compile(
-        r"Na Portaria nº (\d+/\d+),\s*"  # Número da portaria
-        r"publicada em (\d{2}/\d{2}/\d{4}),\s*"  # Data de publicação
-        r"\s*onde se lê:\s*([\wÀ-ÿ\s,]+?)(,|\.)\s*"  # Nome original
-        r"leia-se:\s*([\wÀ-ÿ\s,]+?)\.",  # Nome corrigido
-        re.DOTALL
+    r"Na Portaria nº (\d+/\d+),\s*"  # Número da portaria
+    r"publicada em (\d{2}/\d{2}/\d{4}),\s*"  # Data de publicação
+    r"onde se lê:\s*(.*?),\s*"  # Texto original (permitindo capturar sem aspas específicas)
+    r"leia-se:\s*(.*?)\.",  # Texto corrigido
+    re.DOTALL
     )
-
+    
     # Processamento de decretos
     for match in regex_decreto.finditer(texto):
         num_decreto, conteudo = match.groups()
@@ -120,7 +124,7 @@ def segmentar_texto(texto):
             "nome": resultado.group(3),
             "cargo": resultado.group(4),
             "cod_cargo": resultado.group(5),
-            "orgao": resultado.group(7)
+            "orgao": resultado.group(6)
         })
 
     # Processamento de portarias insubsistentes
@@ -137,7 +141,7 @@ def segmentar_texto(texto):
             "num_portaria": resultado.group(1),
             "data_publicacao": resultado.group(2),
             "texto_anterior": resultado.group(3),
-            "texto_corrigido": resultado.group(5)
+            "texto_corrigido": resultado.group(4)
         })
 
     return decretos, portarias_nomeacao, portarias_exoneracao, portarias_insubsistentes, portarias_corrigendas
