@@ -56,37 +56,37 @@ def segmentar_texto(texto):
         r"PREFEITURA MUNICIPAL DE NITERÓI, EM \d{1,2} DE \w+ DE \d{4}\.",  # Captura a data final do decreto
         re.DOTALL
     )
-
+    # Nomeação
     regex_portaria_nomeacao = re.compile(
-        r"Port\. Nº (\d+/\d+)\s*-"  # Número da portaria
+        r"Port\. Nº (\d+/\d+)\s*-\s*"  # Número da portaria
         r"\s*(Nomeia|Nomear)\s*"  # Tipo
-        r"([\wÀ-ÿ\s]+?)\s*"  # Nome
+        r"([\wÀ-ÿ\s,]+?)\s*"  # Nome
         r"para exercer o cargo de\s*([\wÀ-ÿ\s]+),\s*([\w\d\s-]+),\s*"  # Cargo e código
         r"(da|do)\s*([\wÀ-ÿ\s,]+?)\s*"  # Órgão
         r"(?:,\s*em\s*vaga\s*decorrente\s*da\s*exoneração\s*de\s*([\wÀ-ÿ\s]+))?"  # Vaga decorrente (opcional)
         r"(?:\s*,\s*acrescido\s*das\s*gratificações\s*previstas\s*na\s*CI\s*nº\s*(\d+/\d+))?\s*\.",  # Gratificações (opcional)
         re.DOTALL
     )
-
+    # Exoneração
     regex_portaria_exoneracao = re.compile(
-        r"Port\. Nº (\d+/\d+)\s*-\s*(Exonera|Exonerar,?\s*a\s*pedido,?|Exonerar,?)"  # Número e tipo
+        r"\s*Port\. Nº (\d+/\d+)\s*-\s*(Exonera,?|Exonerar,?|Exonerar,?\s*a\s*pedido,?|Exonera,?\s*a\s*pedido,?)"  # Número e tipo
         r"\s*([\wÀ-ÿ\s]+?)\s*"  # Nome
-        r"do\s*cargo\s*de\s*([\wÀ-ÿ\s,]+),\s*([\w\d\s-]+),"  # Cargo e código do cargo
+        r"\s*do\s*cargo\s*de\s*([\wÀ-ÿ\s,]+),\s*([\w\d\s-]+),"  # Cargo e código do cargo
         r"\s*(da|do)\s*([\wÀ-ÿ\s]+)",  # Órgão
         re.DOTALL
     )
-
+    # Torna insubsistente
     regex_insubsistente = re.compile(
         r"Port\. Nº (\d+/\d+)\s*-\s*"  # Número da portaria atual
         r"Torna insubsistente a Portaria (nº|Nº) (\d+/\d+),\s*"  # Número da portaria insubsistente
         r"publicada em (\d{2}/\d{2}/\d{4})\.?",  # Data de publicação
         re.DOTALL
     )
-
+    # Corrigenda
     regex_substituicao = re.compile(
         r"Na Portaria nº (\d+/\d+),\s*"  # Número da portaria
         r"publicada em (\d{2}/\d{2}/\d{4}),\s*"  # Data de publicação
-        r"\s*onde se lê:\s*([\wÀ-ÿ\s,]+?)\.\s*"  # Nome original
+        r"\s*onde se lê:\s*([\wÀ-ÿ\s,]+?)(,|\.)\s*"  # Nome original
         r"leia-se:\s*([\wÀ-ÿ\s,]+?)\.",  # Nome corrigido
         re.DOTALL
     )
@@ -137,34 +137,35 @@ def segmentar_texto(texto):
             "num_portaria": resultado.group(1),
             "data_publicacao": resultado.group(2),
             "texto_anterior": resultado.group(3),
-            "texto_corrigido": resultado.group(4)
+            "texto_corrigido": resultado.group(5)
         })
 
     return decretos, portarias_nomeacao, portarias_exoneracao, portarias_insubsistentes, portarias_corrigendas
 
 def salvar_csv(decretos, portarias_nomeacao, portarias_exoneracao, portarias_insubsistentes, portarias_corrigendas):
     """Salva os decretos e portarias em arquivos CSV."""
-    with open("decretos.csv", "w", newline="", encoding="utf-8") as f:
+    data_hoje = date.today().strftime("%d-%m-%Y")  # Formato DD-MM-AAAA
+    with open(f"decretos_{data_hoje}.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["Número", "Conteúdo"])
         writer.writeheader()
         writer.writerows(decretos)
 
-    with open("portarias_nomeacao.csv", "w", newline="", encoding="utf-8") as f:
+    with open(f"portarias_nomeacao_{data_hoje}.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["num_portaria", "tipo", "nome", "cargo", "cod_cargo", "orgao", "vaga_decorrente", "gratificacoes"])
         writer.writeheader()
         writer.writerows(portarias_nomeacao)
 
-    with open("portarias_exoneracao.csv", "w", newline="", encoding="utf-8") as f:
+    with open(f"portarias_exoneracao_{data_hoje}.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["num_portaria", "tipo", "nome", "cargo", "cod_cargo", "orgao"])
         writer.writeheader()
         writer.writerows(portarias_exoneracao)
 
-    with open("portarias_insubsistentes.csv", "w", newline="", encoding="utf-8") as f:
+    with open(f"portarias_insubsistentes_{data_hoje}.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["num_portaria", "portaria_insubsistente", "data_publicacao"])
         writer.writeheader()
         writer.writerows(portarias_insubsistentes)
 
-    with open("portarias_corrigendas.csv", "w", newline="", encoding="utf-8") as f:
+    with open(f"portarias_corrigendas_{data_hoje}.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["num_portaria", "data_publicacao", "texto_anterior", "texto_corrigido"])
         writer.writeheader()
         writer.writerows(portarias_corrigendas)
