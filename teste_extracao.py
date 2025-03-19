@@ -2,6 +2,7 @@ import requests
 import pdfplumber
 import json
 import io
+import re
 from datetime import date
 
 # Dicionário para converter número do mês para nome abreviado
@@ -35,6 +36,12 @@ def extrair_texto_pdf(pdf_bytes):
         for pagina in pdf.pages:
             texto += pagina.extract_text()
     return texto
+
+def pre_processar_texto(texto):
+    """Remove cabeçalhos de página e ruídos do texto extraído."""
+    linhas = texto.split("\n")
+    texto_limpo = [linha for linha in linhas if not re.search(r"Página \d+", linha)]
+    return "\n".join(texto_limpo)
 
 def buscar_decretos(texto):
     """Busca decretos no texto usando lógica de programação."""
@@ -71,61 +78,134 @@ def buscar_portarias(texto):
     linhas = texto.split("\n")
     i = 0
     while i < len(linhas):
-        if "Port. Nº" in linhas[i]:  # Corrigido para "Port. Nº"
-            partes = linhas[i].split(" - ")
-            if len(partes) > 1:
-                num_portaria = partes[0].split("Port. Nº")[1].strip()
-                tipo = partes[1].strip()
-                nome = ""
-                cargo = ""
-                codigo_cargo = ""
-                orgao = ""
-                vaga_exoneracao = ""
-                vaga_transferida = ""
+        if "Port. Nº" in linhas[i]:
+            # Inicializa as variáveis
+            num_portaria = ""
+            tipo = ""
+            nome = ""
+            cargo = ""
+            codigo_cargo = ""
+            orgao = ""
+            vaga_exoneracao = ""
+            vaga_transferida = ""
+            descricao = ""
 
-                # Captura o nome, cargo, código do cargo e órgão
-                # Ajuste para capturar informações corretamente
-                if i + 1 < len(linhas):
-                    nome = linhas[i + 1].strip()
-                if i + 2 < len(linhas):
-                    cargo = linhas[i + 2].strip()
-                if i + 3 < len(linhas):
-                    codigo_cargo = linhas[i + 3].strip()
-                if i + 4 < len(linhas):
-                    orgao = linhas[i + 4].strip()
+            # Extrai o número da portaria (remove o "-" no final, se houver)
+            num_portaria = linhas[i].split("Port. Nº")[1].split()[0].strip().rstrip("-")
 
-                # Captura informações específicas para cada tipo de portaria
-                if "Nomeia" in tipo or "Nomear" in tipo:
-                    # Captura vaga decorrente da exoneração ou transferida pelo Decreto
-                    if "em vaga decorrente da exoneração de" in linhas[i + 1]:
-                        vaga_exoneracao = linhas[i + 1].split("em vaga decorrente da exoneração de")[1].strip().split(",")[0].strip()
-                    if "em vaga transferida pelo Decreto" in linhas[i + 1]:
-                        vaga_transferida = linhas[i + 1].split("em vaga transferida pelo Decreto")[1].strip().split(",")[0].strip()
-                elif "Exonera" in tipo or "Exonerar" in tipo:
-                    # Captura vaga decorrente da exoneração
-                    if "em vaga decorrente da exoneração de" in linhas[i + 1]:
-                        vaga_exoneracao = linhas[i + 1].split("em vaga decorrente da exoneração de")[1].strip().split(",")[0].strip()
-                elif "Torna insubsistente" in tipo:
-                    # Não há informações adicionais para capturar
-                    pass
-
-                portarias.append({
-                    "Número": num_portaria,
-                    "Tipo": tipo,
-                    "Nome": nome,
-                    "Cargo": cargo,
-                    "Código do Cargo": codigo_cargo,
-                    "Órgão": orgao,
-                    "Vaga Decorrente da Exoneração": vaga_exoneracao,
-                    "Vaga Transferida pelo Decreto": vaga_transferida
-                })
-                i += 5  # Avança 5 linhas após a portaria
+            # Extrai o tipo da portaria (Nomeia, Exonera, Torna insubsistente)
+            if "Nomeia" in linhas[i] or "Nomear" in linhas[i]:
+                tipo = "Nomeação"
+            elif "Exonera" in linhas[i] or "Exonerar" in linhas[i]:
+                tipo = "Exoneração"
             else:
-                print(f"Delimitador não encontrado na linha: {linhas[i]}")
-                i += 1
+                tipo = "Outro"
+
+            # Concatena as linhas seguintes até encontrar a próxima portaria ou "SECRETARIA MUNICIPAL"
+            texto_portaria = linhas[i].strip()
+            j = i + 1
+            while j < len(linhas):
+                if "Port. Nº" in linhas[j] or "SECRETARIA MUNICIPAL" in linhas[j]:
+                    break  # Para de concatenar se encontrar outra portaria ou "SECRETARIA MUNICIPAL"
+                texto_portaria += " " + linhas[j].strip()
+                j += 1
+            
+            # Armazena o texto completo da portaria no campo "descricao"
+            descricao = texto_portaria
+
+            # Extrai o nome da pessoa
+            if tipo == "Nomeação":
+                partes_nome = texto_portaria.split("Nomeia")
+                if len(partes_nome) > 1:
+                    nome = partes_nome[1].split("para exercer")[0].strip()
+            elif tipo == "Exoneração":
+                partes_nome = texto_portaria.split("Exonera")
+                if len(partes_nome) > 1:
+                    nome = partes_nome[1].split("do cargo")[0].strip().split(",")[-1].strip()
+
+            # Extrai o cargo e o código do cargo
+            if "do cargo de" in texto_portaria:
+                cargo_completo = texto_portaria.split("do cargo de")[1].split(",")[0].strip()
+                cargo_completo = re.sub(r'\s+', ' ', cargo_completo)  # Remove espaços extras
+                if "-" in cargo_completo:
+                    cargo = cargo_completo.split(",")[0].strip()
+                    codigo_cargo = cargo_completo.split(",")[1].strip()
+                else:
+                    cargo = cargo_completo
+
+            # Extrai o órgão
+            if "da Secretaria" in texto_portaria:
+                orgao = "Secretaria " + texto_portaria.split("da Secretaria")[1].split(",")[0].strip()
+            elif "do Gabinete" in texto_portaria:
+                orgao = "Gabinete " + texto_portaria.split("do Gabinete")[1].split(",")[0].strip()
+            elif "da Gabinete" in texto_portaria:
+                orgao = "Gabinete " + texto_portaria.split("da Gabinete")[1].split(",")[0].strip()
+            elif "da Fundação" in texto_portaria:
+                orgao = "Fundação " + texto_portaria.split("da Fundação")[1].split(",")[0].strip()
+            elif "da Administração Regional" in texto_portaria:
+                orgao = "Administração Regional " + texto_portaria.split("da Administração Regional")[1].split(",")[0].strip()
+
+            # Captura informações específicas para cada tipo de portaria
+            if "em vaga decorrente da exoneração de" in texto_portaria:
+                vaga_exoneracao = texto_portaria.split("em vaga decorrente da exoneração de")[1].strip().split(",")[0].strip()
+            if "em vaga transferida pelo Decreto" in texto_portaria:
+                vaga_transferida = texto_portaria.split("em vaga transferida pelo Decreto")[1].strip().split(",")[0].strip()
+
+            # Adiciona a portaria à lista
+            portarias.append({
+                "Número": num_portaria,
+                "Tipo": tipo,
+                "Nome": nome,
+                "Cargo": cargo,
+                "Código do Cargo": codigo_cargo,
+                "Órgão": orgao,
+                "Vaga Decorrente da Exoneração": vaga_exoneracao,
+                "Vaga Transferida pelo Decreto": vaga_transferida,
+                "Descrição": descricao
+            })
+
+            # Atualiza o índice para pular as linhas já processadas
+            i = j
         else:
             i += 1
     return portarias
+
+def buscar_insubsistentes(texto):
+    """Busca portarias insubsistentes no texto usando lógica de programação."""
+    insubsistentes = []
+    linhas = texto.split("\n")
+    i = 0
+    while i < len(linhas):
+        linha = linhas[i].strip()
+        
+        # Verifica se a linha contém "Torna insubsistente" ou "Torna sem efeito"
+        if "torna insubsistente" in linha.lower() or "torna sem efeito" in linha.lower():
+            # Extrai o número da portaria atual
+            if "port. nº" in linha.lower():
+                num_portaria = linha.split("Port. Nº")[1].split()[0].strip().rstrip("-")
+            else:
+                num_portaria = ""
+
+            # Extrai o número da portaria insubsistente
+            if "portaria nº" in linha.lower():
+                portaria_insubsistente = linha.split("Portaria nº")[1].split(",")[0].strip()
+            else:
+                portaria_insubsistente = ""
+
+            # Extrai a data de publicação
+            if "publicada em" in linha.lower():
+                data_publicacao = linha.split("publicada em")[1].split(".")[0].strip()
+            else:
+                data_publicacao = ""
+
+            # Adiciona a portaria insubsistente à lista
+            insubsistentes.append({
+                "Número da Portaria": num_portaria,
+                "Portaria Insubsistente": portaria_insubsistente,
+                "Data de Publicação": data_publicacao
+            })
+        i += 1
+    return insubsistentes
 
 def buscar_corrigendas(texto):
     """Busca corrigendas no texto usando lógica de programação."""
@@ -175,12 +255,14 @@ if __name__ == "__main__":
         decretos = buscar_decretos(texto)
         portarias = buscar_portarias(texto)
         corrigendas = buscar_corrigendas(texto)
+        insubsistentes = buscar_insubsistentes(texto)
 
         # Salva os resultados em JSON
         resultados = {
             "Decretos": decretos,
             "Portarias": portarias,
-            "Corrigendas": corrigendas
+            "Corrigendas": corrigendas,
+            "Insubsistentes": insubsistentes
         }
         nome_arquivo = f"diario_oficial_{hoje.strftime('%d-%m-%Y')}.json"
         salvar_json(resultados, nome_arquivo)
