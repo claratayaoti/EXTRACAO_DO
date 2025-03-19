@@ -305,4 +305,5 @@ if __name__ == "__main__":
     salvar_json(todas_corrigendas, f"corrigendas_{data_inicio.strftime('%d-%m-%Y')}_a_{data_atual.strftime('%d-%m-%Y')}.json")
     salvar_json(todas_insubsistentes, f"insubsistentes_{data_inicio.strftime('%d-%m-%Y')}_a_{data_atual.strftime('%d-%m-%Y')}.json")
 
+
     print("✅ Dados salvos em arquivos JSON separados.")
