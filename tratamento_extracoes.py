@@ -14,7 +14,7 @@ def limpar_campo(campo):
 # Dicionário para definir os campos de cada arquivo
 campos_arquivos = {
     "decretos": ["Número", "Conteúdo"],
-    "portarias_nomeacao": ["num_portaria", "tipo", "nome", "cargo", "cod_cargo", "orgao", "vaga_decorrente", "gratificacoes"],
+    "portarias_nomeacao": ["num_portaria", "tipo", "nome", "cargo", "cod_cargo", "orgao", "vaga_decorrente", "vaga_transferida", "gratificacoes"],
     "portarias_exoneracao": ["num_portaria", "tipo", "nome", "cargo", "cod_cargo", "orgao"],
     "portarias_insubsistentes": ["num_portaria", "portaria_insubsistente", "data_publicacao"],
     "portarias_corrigendas": ["num_portaria", "data_publicacao", "texto_anterior", "texto_corrigido"]

@@ -64,6 +64,7 @@ def segmentar_texto(texto):
         r"([\wÀ-ÿ\s,]+?)\s*"  # Nome
         r"para exercer o cargo de\s*([\wÀ-ÿ\s]+),\s*([\w\d\s-]+),\s*"  # Cargo e código
         r"(da|do)\s*([\wÀ-ÿ\s,]+?)\s*"  # Órgão
+        r"(?:,\s*em vaga transferida pelo Decreto Nº (\d+/\d+),)?" #Vaga transferida (opcional)
         r"(?:,\s*em\s*vaga\s*decorrente\s*da\s*exoneração\s*de\s*([\wÀ-ÿ\s]+))?"  # Vaga decorrente (opcional)
         r"(?:\s*,\s*acrescido\s*das\s*gratificações\s*previstas\s*na\s*CI\s*nº\s*(\d+/\d+))?\s*\.",  # Gratificações (opcional)
         re.DOTALL
@@ -73,6 +74,7 @@ def segmentar_texto(texto):
     regex_portaria_exoneracao = re.compile(
         r"Port\. Nº (\d+/\d+)\s*-\s*(Exonera(?:,?\s*a\s*pedido)?|Exonerar,?\s*a\s*pedido?|Exonera,\s*|Exonerar,\s*),?\s*"  # Número da portaria e tipo de exoneração
         r"([\wÀ-ÿ\s]+?),?\s*"  # Nome do exonerado
+        r"(?do cargo isolado de provimento em comissão)?" # Cargo isolado
         r"do\s*cargo\s*de\s*([\wÀ-ÿ\s]+),\s*([\w\d\s-]+),\s*"  # Cargo e código
         r"(?:da|do)\s*([\wÀ-ÿ\s,]+)",  # Órgão
         re.DOTALL
@@ -81,18 +83,18 @@ def segmentar_texto(texto):
     # Torna insubsistente
     regex_insubsistente = re.compile(
         r"Port\. Nº (\d+/\d+)\s*-\s*"  # Número da portaria atual
-        r"Torna insubsistente a Portaria (nº|Nº) (\d+/\d+),\s*"  # Número da portaria insubsistente
+        r"Torna (insubsistente|sem efeito) a (Portaria|Port.) (nº|Nº) (\d+/\d+),\s*"  # Número da portaria insubsistente
         r"publicada em (\d{2}/\d{2}/\d{4})\.?",  # Data de publicação
         re.DOTALL
     )
 
     # Corrigenda
     regex_substituicao = re.compile(
-    r"Na Portaria nº (\d+/\d+),\s*"  # Número da portaria
-    r"publicada em (\d{2}/\d{2}/\d{4}),\s*"  # Data de publicação
-    r"onde se lê:\s*(.*?),\s*"  # Texto original (permitindo capturar sem aspas específicas)
-    r"leia-se:\s*(.*?)\.",  # Texto corrigido
-    re.DOTALL
+        r"Na Portaria nº (\d+/\d+),\s*"  # Número da portaria
+        r"publicada em (\d{2}/\d{2}/\d{4}),\s*"  # Data de publicação
+        r"onde se lê:\s*(.*?),\s*"  # Texto original (permitindo capturar sem aspas específicas)
+        r"leia-se:\s*(.*?)\.",  # Texto corrigido
+        re.DOTALL
     )
     
     # Processamento de decretos
